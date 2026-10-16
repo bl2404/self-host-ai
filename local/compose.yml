@@ -1,0 +1,26 @@
+services:
+  webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: local-ai-webui
+    ports:
+      - "3000:8080"
+    environment:
+      # One stable URL from any container → host's Docker Model Runner
+      - OPENAI_API_BASE_URL=http://host.docker.internal:12434/engines/v1
+      - OPENAI_API_KEY=local-key
+      - WEBUI_NAME=alabama
+    extra_hosts:
+      # Makes host.docker.internal work on Linux too
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./open-webui-data:/app/backend/data:Z
+    depends_on:
+      - smollm2-runner
+
+  # Runs the model via Docker Model Runner (not a normal container)
+  smollm2-runner:
+    provider:
+      type: model
+      options:
+        model: ai/smollm2:360M-Q4_K_M
+        gpu: true   # uncomment if your GPU is configured and you want acceleration

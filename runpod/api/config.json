@@ -1,0 +1,20 @@
+{
+    "pod": {
+        "name": "my-first-pod",
+        "computeType": "GPU",
+        "cloudType": "COMMUNITY",
+        "gpuCount": 1,
+        "imageName": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+        "containerDiskInGb": 30,
+        "ports": [
+            "8888/http",
+            "22/tcp"
+        ]
+    },
+    "gpu_preferences": {
+        "min_vram": 32,
+        "max_price": 1.0,
+        "cloud": "COMMUNITY",
+        "count": 1
+    }
+}

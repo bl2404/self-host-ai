@@ -1,0 +1,19 @@
+# Runtime data
+**/open-webui-data/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Environment files and local credentials
+.env
+.env.*
+!.env.example
+*_api_key.txt
+
+# OS metadata
+.DS_Store

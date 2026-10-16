@@ -1,0 +1,20 @@
+services:
+  webuiai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: webuiai:latest
+    container_name: webuiai
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    environment:
+      OPENAI_API_BASE_URL: http://127.0.0.1:11434/v1
+      OPENAI_API_KEY: local-key
+      WEBUI_NAME: alabama
+      RUNPOD_SSH_HOST: ${RUNPOD_SSH_HOST:?Set RUNPOD_SSH_HOST in .env}
+      RUNPOD_SSH_PORT: ${RUNPOD_SSH_PORT:-22036}
+      RUNPOD_SSH_USER: ${RUNPOD_SSH_USER:-root}
+    volumes:
+      - ./open-webui-data:/app/backend/data:Z
+      - ${RUNPOD_SSH_KEY:?Set RUNPOD_SSH_KEY in .env}:/runpod/id_ed25519:ro,Z
