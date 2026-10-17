@@ -1,5 +1,5 @@
 {
-    "pod_startup_script_url": "https://raw.githubusercontent.com/bl2404/self-host-ai/f12467eb303e309cf0e22f4de414e34d58dce835/runpod/pod-startup.sh",
+    "pod_startup_script_url": "https://raw.githubusercontent.com/bl2404/self-host-ai/f55109e80e14814f94797d2c834e4a628c2acce9/runpod/pod-startup.sh",
     "pod": {
         "name": "my-first-pod",
         "computeType": "GPU",
