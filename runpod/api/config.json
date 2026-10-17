@@ -1,5 +1,5 @@
 {
-    "pod_startup_script_url": "https://drive.google.com/file/d/1eDBJ6pyYAD9h9Bv0WYb_iX37AhdCQi7a/view?usp=sharing",
+    "pod_startup_script_url": "https://raw.githubusercontent.com/bl2404/self-host-ai/f12467eb303e309cf0e22f4de414e34d58dce835/runpod/pod-startup.sh",
     "pod": {
         "name": "my-first-pod",
         "computeType": "GPU",
