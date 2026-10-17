@@ -9,6 +9,7 @@ fi
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3:8b}"
 OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1:11434}"
 OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/ollama}"
+OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:--1}"
 OLLAMA_LOG="${OLLAMA_LOG:-/workspace/ollama.log}"
 
 if [[ -n "${RUNPOD_SSH_PUBLIC_KEY:-}" ]]; then
@@ -58,7 +59,7 @@ if ! command -v ollama >/dev/null 2>&1; then
   curl -fsSL https://ollama.com/install.sh | sh
 fi
 
-export OLLAMA_HOST OLLAMA_MODELS
+export OLLAMA_HOST OLLAMA_MODELS OLLAMA_KEEP_ALIVE
 mkdir -p "$OLLAMA_MODELS" "$(dirname "$OLLAMA_LOG")"
 
 ollama serve >"$OLLAMA_LOG" 2>&1 &
@@ -92,5 +93,9 @@ if [[ "$ready" != true ]]; then
 fi
 
 ollama pull "$OLLAMA_MODEL"
+curl -fsS http://127.0.0.1:11434/api/generate \
+  -H 'Content-Type: application/json' \
+  -d "{\"model\":\"$OLLAMA_MODEL\",\"prompt\":\"\",\"stream\":false,\"think\":false,\"keep_alive\":-1,\"options\":{\"num_predict\":1}}" \
+  >/dev/null
 printf 'Ollama is ready with model %s.\n' "$OLLAMA_MODEL"
 wait "$ollama_pid"
