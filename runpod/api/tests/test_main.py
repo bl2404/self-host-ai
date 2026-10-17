@@ -264,6 +264,52 @@ class HelloTest(unittest.TestCase):
             timeout=10.0,
         )
 
+    @patch("main.httpx.post")
+    def test_create_pod_injects_ssh_public_key_into_configured_environment(
+        self, post: Mock
+    ) -> None:
+        post.return_value = Mock(
+            content=b'{"id":"pod-created"}',
+            status_code=201,
+            headers={"content-type": "application/json"},
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            key_file = Path(temp_dir) / "runpod_api_key.txt"
+            key_file.write_text("test-key", encoding="utf-8")
+            public_key_file = Path(temp_dir) / "id_ed25519.pub"
+            public_key_file.write_text(
+                "ssh-ed25519 AAAATEST key-comment\n", encoding="utf-8"
+            )
+            config_file = Path(temp_dir) / "config.json"
+            config_file.write_text(
+                '{"pod":{"name":"configured-pod","gpuTypeIds":'
+                '["NVIDIA A40"],"env":["OLLAMA_MODEL=qwen3:8b"]},'
+                '"gpu_preferences":{}}',
+                encoding="utf-8",
+            )
+            with (
+                patch("main.RUNPOD_API_KEY_FILE", key_file),
+                patch("main.RUNPOD_SSH_PUBLIC_KEY_FILE", public_key_file),
+                patch("main.CONFIG_FILE", config_file),
+            ):
+                response = self.client.post("/runpod/pods")
+
+        self.assertEqual(response.status_code, 201)
+        post.assert_called_once_with(
+            RUNPOD_PODS_URL,
+            headers={"Authorization": "Bearer test-key"},
+            json={
+                "name": "configured-pod",
+                "gpuTypeIds": ["NVIDIA A40"],
+                "env": [
+                    "OLLAMA_MODEL=qwen3:8b",
+                    "RUNPOD_SSH_PUBLIC_KEY=ssh-ed25519 AAAATEST key-comment",
+                ],
+            },
+            timeout=10.0,
+        )
+
     @patch("main.httpx.get")
     @patch("main.httpx.post")
     def test_create_pod_uses_explicit_gpu_type_ids_from_config(

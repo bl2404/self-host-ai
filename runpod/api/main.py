@@ -17,6 +17,11 @@ RUNPOD_API_KEY_FILE = Path(
         "RUNPOD_API_KEY_FILE", Path(__file__).with_name("runpod_api_key.txt")
     )
 )
+RUNPOD_SSH_PUBLIC_KEY_FILE = (
+    Path(os.environ["RUNPOD_SSH_PUBLIC_KEY_FILE"])
+    if os.environ.get("RUNPOD_SSH_PUBLIC_KEY_FILE")
+    else None
+)
 
 app = FastAPI(title="Runpod API bridge")
 
@@ -33,6 +38,24 @@ def _get_runpod_api_key() -> str:
         raise HTTPException(status_code=503, detail="Runpod API key is not configured")
 
     return api_key
+
+
+def _get_runpod_ssh_public_key() -> str | None:
+    if RUNPOD_SSH_PUBLIC_KEY_FILE is None:
+        return None
+
+    try:
+        public_key = RUNPOD_SSH_PUBLIC_KEY_FILE.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise HTTPException(
+            status_code=503, detail="Runpod SSH public key is not configured"
+        ) from exc
+
+    key_parts = public_key.split()
+    if len(key_parts) < 2 or not key_parts[0].startswith(("ssh-", "ecdsa-")):
+        raise HTTPException(status_code=503, detail="Runpod SSH public key is invalid")
+
+    return public_key
 
 
 def _proxy_response(upstream: httpx.Response) -> Response:
@@ -242,6 +265,21 @@ def create_runpod_pod(
     pod_config, gpu_preferences = _load_app_config()
     if pod_overrides:
         pod_config.update(pod_overrides)
+
+    pod_environment = pod_config.get("env", [])
+    if not isinstance(pod_environment, list) or any(
+        not isinstance(variable, str) for variable in pod_environment
+    ):
+        raise HTTPException(status_code=500, detail="Pod environment config is invalid")
+    public_key = _get_runpod_ssh_public_key()
+    if public_key is not None:
+        pod_environment = [
+            variable
+            for variable in pod_environment
+            if not variable.startswith("RUNPOD_SSH_PUBLIC_KEY=")
+        ]
+        pod_environment.append(f"RUNPOD_SSH_PUBLIC_KEY={public_key}")
+        pod_config["env"] = pod_environment
 
     if "gpuTypeIds" not in pod_config and pod_config.get("computeType", "GPU") == "GPU":
         cloud = pod_config.get("cloudType", gpu_preferences.get("cloud", "COMMUNITY"))

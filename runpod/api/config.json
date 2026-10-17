@@ -6,6 +6,11 @@
         "gpuCount": 1,
         "imageName": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
         "containerDiskInGb": 30,
+        "env": [
+            "OLLAMA_MODEL=qwen3:8b",
+            "OLLAMA_HOST=127.0.0.1:11434",
+            "OLLAMA_MODELS=/workspace/ollama"
+        ],
         "ports": [
             "8888/http",
             "22/tcp"

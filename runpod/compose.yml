@@ -30,6 +30,8 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       RUNPOD_API_KEY_FILE: /run/secrets/runpod_api_key
+      RUNPOD_SSH_PUBLIC_KEY_FILE: /runpod/id_ed25519.pub
     volumes:
       - ./api/config.json:/app/config.json:ro,Z
       - ./api/runpod_api_key.txt:/run/secrets/runpod_api_key:ro,Z
+      - ${RUNPOD_SSH_KEY:?Set RUNPOD_SSH_KEY in .env}.pub:/runpod/id_ed25519.pub:ro,Z
