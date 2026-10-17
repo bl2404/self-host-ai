@@ -28,6 +28,22 @@ if [[ -n "${RUNPOD_SSH_PUBLIC_KEY:-}" ]]; then
   fi
 fi
 
+if ! command -v sshd >/dev/null 2>&1; then
+  if ! command -v apt-get >/dev/null 2>&1; then
+    printf 'sshd is required, and this image has no apt-get package manager.\n' >&2
+    exit 1
+  fi
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends openssh-server
+fi
+
+install -d -m 0755 /run/sshd
+ssh-keygen -A
+if ! pgrep -x sshd >/dev/null 2>&1; then
+  /usr/sbin/sshd
+fi
+
 if ! command -v curl >/dev/null 2>&1; then
   if ! command -v apt-get >/dev/null 2>&1; then
     printf 'curl is required, and this image has no apt-get package manager.\n' >&2
