@@ -9,15 +9,11 @@ services:
     ports:
       - "3000:8080"
     environment:
-      OPENAI_API_BASE_URL: http://127.0.0.1:11434/v1
+      OPENAI_API_BASE_URL: http://runpod-api:11434/v1
       OPENAI_API_KEY: local-key
       WEBUI_NAME: alabama
-      RUNPOD_SSH_HOST: ${RUNPOD_SSH_HOST:?Set RUNPOD_SSH_HOST in .env}
-      RUNPOD_SSH_PORT: ${RUNPOD_SSH_PORT:-22036}
-      RUNPOD_SSH_USER: ${RUNPOD_SSH_USER:-root}
     volumes:
       - ./open-webui-data:/app/backend/data:Z
-      - ${RUNPOD_SSH_KEY:?Set RUNPOD_SSH_KEY in .env}:/runpod/id_ed25519:ro,Z
 
   runpod-api:
     build:
@@ -31,7 +27,9 @@ services:
     environment:
       RUNPOD_API_KEY_FILE: /run/secrets/runpod_api_key
       RUNPOD_SSH_PUBLIC_KEY_FILE: /runpod/id_ed25519.pub
+      RUNPOD_SSH_KEY_FILE: /runpod/id_ed25519
     volumes:
       - ./api/config.json:/app/config.json:ro,Z
       - ./api/runpod_api_key.txt:/run/secrets/runpod_api_key:ro,Z
+      - ${RUNPOD_SSH_KEY:?Set RUNPOD_SSH_KEY in .env}:/runpod/id_ed25519:ro,Z
       - ${RUNPOD_SSH_KEY:?Set RUNPOD_SSH_KEY in .env}.pub:/runpod/id_ed25519.pub:ro,Z

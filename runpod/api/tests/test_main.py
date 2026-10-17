@@ -51,6 +51,125 @@ class HelloTest(unittest.TestCase):
         )
         get.assert_called_once()
 
+    @patch("main.socket.create_connection")
+    @patch("main.subprocess.Popen")
+    @patch("main._find_runpod_pod_by_name")
+    @patch("main._load_app_config")
+    def test_create_ssh_tunnel_starts_helper_with_configured_connection(
+        self, load_config: Mock, find_pod: Mock, popen: Mock, connect: Mock
+    ) -> None:
+        process = Mock(pid=123, poll=Mock(return_value=None))
+        popen.return_value = process
+        load_config.return_value = (
+            {"name": "configured-pod"},
+            {},
+            STARTUP_SCRIPT_URL,
+        )
+        find_pod.return_value = {
+            "id": "pod-id",
+            "name": "configured-pod",
+            "publicIp": "60.249.37.148",
+            "portMappings": {"22": 26380},
+        }
+
+        with TemporaryDirectory() as temp_dir:
+            key_file = Path(temp_dir) / "id_ed25519"
+            key_file.write_text("private-key", encoding="utf-8")
+            with (
+                patch("main._ssh_tunnel_process", None),
+                patch.dict(
+                    "main.os.environ",
+                    {
+                        "RUNPOD_SSH_KEY_FILE": str(key_file),
+                    },
+                ),
+            ):
+                response = self.client.post("/runpod/create-ssh-tunnel")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "connected", "pid": 123})
+        find_pod.assert_called_once_with("configured-pod")
+        popen.assert_called_once()
+        self.assertEqual(
+            popen.call_args.args[0], ["/usr/local/bin/tunnel-entrypoint"]
+        )
+        self.assertEqual(popen.call_args.kwargs["env"]["RUNPOD_SSH_HOST"], "60.249.37.148")
+        self.assertEqual(popen.call_args.kwargs["env"]["RUNPOD_SSH_PORT"], "26380")
+        connect.assert_called_once_with(("127.0.0.1", 11434), timeout=0.2)
+
+    @patch("main.SSH_TUNNEL_START_TIMEOUT_SECONDS", 0)
+    @patch("main.subprocess.Popen")
+    @patch("main._find_runpod_pod_by_name")
+    @patch("main._load_app_config")
+    def test_create_ssh_tunnel_terminates_helper_on_timeout(
+        self, load_config: Mock, find_pod: Mock, popen: Mock
+    ) -> None:
+        process = Mock(pid=123, poll=Mock(return_value=None))
+        popen.return_value = process
+        load_config.return_value = (
+            {"name": "configured-pod"},
+            {},
+            STARTUP_SCRIPT_URL,
+        )
+        find_pod.return_value = {
+            "id": "pod-id",
+            "name": "configured-pod",
+            "publicIp": "60.249.37.148",
+            "portMappings": {"22": 26380},
+        }
+
+        with TemporaryDirectory() as temp_dir:
+            key_file = Path(temp_dir) / "id_ed25519"
+            key_file.write_text("private-key", encoding="utf-8")
+            with (
+                patch("main._ssh_tunnel_process", None),
+                patch.dict(
+                    "main.os.environ",
+                    {"RUNPOD_SSH_KEY_FILE": str(key_file)},
+                ),
+            ):
+                response = self.client.post("/runpod/create-ssh-tunnel")
+
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(
+            response.json(),
+            {"detail": "SSH tunnel did not start within 0 seconds"},
+        )
+        process.terminate.assert_called_once()
+
+    @patch("main.subprocess.Popen")
+    def test_create_ssh_tunnel_is_idempotent_while_helper_is_running(
+        self, popen: Mock
+    ) -> None:
+        process = Mock(pid=123, poll=Mock(return_value=None))
+
+        with patch("main._ssh_tunnel_process", process):
+            response = self.client.post("/runpod/create-ssh-tunnel")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(), {"status": "already_running", "pid": 123}
+        )
+        popen.assert_not_called()
+
+    def test_remove_ssh_tunnel_terminates_running_helper(self) -> None:
+        process = Mock(pid=123, poll=Mock(return_value=None))
+
+        with patch("main._ssh_tunnel_process", process):
+            response = self.client.post("/runpod/remove-ssh-tunnel")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "stopped"})
+        process.terminate.assert_called_once()
+        process.wait.assert_called_once_with(timeout=5)
+
+    def test_remove_ssh_tunnel_is_idempotent_when_not_running(self) -> None:
+        with patch("main._ssh_tunnel_process", None):
+            response = self.client.post("/runpod/remove-ssh-tunnel")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "already_stopped"})
+
     @patch("main.httpx.get")
     def test_cheapest_gpu_obeys_vram_availability_and_cloud_criteria(
         self, get: Mock
@@ -446,10 +565,11 @@ class HelloTest(unittest.TestCase):
             timeout=10.0,
         )
 
+    @patch("main._remove_ssh_tunnel")
     @patch("main.httpx.delete")
     @patch("main.httpx.get")
     def test_delete_pod_by_name_deletes_only_matching_pod(
-        self, get: Mock, delete: Mock
+        self, get: Mock, delete: Mock, remove_ssh_tunnel: Mock
     ) -> None:
         get.return_value = Mock(
             json=Mock(
@@ -482,6 +602,7 @@ class HelloTest(unittest.TestCase):
             headers={"Authorization": "Bearer test-key"},
             timeout=10.0,
         )
+        remove_ssh_tunnel.assert_called_once_with()
 
     @patch("main.httpx.post")
     @patch("main.httpx.get")

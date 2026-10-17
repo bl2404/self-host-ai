@@ -1,6 +1,9 @@
 import json
 import os
 import shlex
+import socket
+import subprocess
+import time
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote, urlsplit
@@ -25,6 +28,8 @@ RUNPOD_SSH_PUBLIC_KEY_FILE = (
 )
 
 app = FastAPI(title="Runpod API bridge")
+_ssh_tunnel_process: subprocess.Popen | None = None
+SSH_TUNNEL_START_TIMEOUT_SECONDS = 10
 
 
 def _get_runpod_api_key() -> str:
@@ -196,6 +201,98 @@ def get_runpod_openapi() -> Response:
         ) from exc
 
     return _proxy_response(upstream)
+
+
+@app.post("/runpod/create-ssh-tunnel")
+def create_ssh_tunnel() -> Response:
+    global _ssh_tunnel_process
+
+    if _ssh_tunnel_process is not None and _ssh_tunnel_process.poll() is None:
+        return JSONResponse(
+            status_code=200,
+            content={"status": "already_running", "pid": _ssh_tunnel_process.pid},
+        )
+
+    pod_config, _, _ = _load_app_config()
+    pod_name = pod_config.get("name")
+    if not isinstance(pod_name, str) or not pod_name:
+        raise HTTPException(status_code=500, detail="Pod name is not configured")
+
+    pod = _find_runpod_pod_by_name(pod_name)
+    if isinstance(pod, Response):
+        return pod
+
+    ssh_host = pod.get("publicIp")
+    port_mappings = pod.get("portMappings")
+    ssh_port = port_mappings.get("22") if isinstance(port_mappings, dict) else None
+    ssh_key_file = os.environ.get("RUNPOD_SSH_KEY_FILE", "/runpod/id_ed25519")
+    if not isinstance(ssh_host, str) or not ssh_host or not ssh_port:
+        raise HTTPException(
+            status_code=409,
+            detail="Pod SSH address and port mapping are not available yet",
+        )
+    if not str(ssh_port).isdigit() or not 1 <= int(ssh_port) <= 65535:
+        raise HTTPException(status_code=502, detail="Pod SSH port mapping is invalid")
+    if not Path(ssh_key_file).is_file():
+        raise HTTPException(status_code=503, detail="SSH private key is unavailable")
+
+    environment = os.environ.copy()
+    environment["RUNPOD_SSH_HOST"] = ssh_host
+    environment["RUNPOD_SSH_PORT"] = str(ssh_port)
+    environment["RUNPOD_SSH_KEY_FILE"] = ssh_key_file
+    try:
+        _ssh_tunnel_process = subprocess.Popen(
+            ["/usr/local/bin/tunnel-entrypoint"],
+            env=environment,
+        )
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Could not start SSH tunnel") from exc
+
+    process = _ssh_tunnel_process
+    deadline = time.monotonic() + SSH_TUNNEL_START_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            _ssh_tunnel_process = None
+            raise HTTPException(
+                status_code=502,
+                detail="SSH tunnel process exited before the tunnel became available",
+            )
+        try:
+            with socket.create_connection(("127.0.0.1", 11434), timeout=0.2):
+                return JSONResponse(
+                    content={"status": "connected", "pid": process.pid}
+                )
+        except OSError:
+            time.sleep(0.1)
+
+    _remove_ssh_tunnel()
+    raise HTTPException(
+        status_code=504,
+        detail=f"SSH tunnel did not start within {SSH_TUNNEL_START_TIMEOUT_SECONDS} seconds",
+    )
+
+
+def _remove_ssh_tunnel() -> str:
+    global _ssh_tunnel_process
+
+    process = _ssh_tunnel_process
+    if process is None or process.poll() is not None:
+        _ssh_tunnel_process = None
+        return "already_stopped"
+
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+    _ssh_tunnel_process = None
+    return "stopped"
+
+
+@app.post("/runpod/remove-ssh-tunnel")
+def remove_ssh_tunnel() -> Response:
+    return JSONResponse(content={"status": _remove_ssh_tunnel()})
 
 
 @app.get("/runpod/gpus/cheapest")
@@ -381,6 +478,8 @@ def delete_runpod_pod(pod_name: str) -> Response:
             detail="Could not connect to the Runpod API",
         ) from exc
 
+    if 200 <= upstream.status_code < 300:
+        _remove_ssh_tunnel()
     return _proxy_response(upstream)
 
 
