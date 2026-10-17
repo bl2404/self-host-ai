@@ -1,8 +1,9 @@
 import json
 import os
+import shlex
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Response
@@ -68,7 +69,7 @@ def _proxy_response(upstream: httpx.Response) -> Response:
     )
 
 
-def _load_app_config() -> tuple[dict[str, Any], dict[str, Any]]:
+def _load_app_config() -> tuple[dict[str, Any], dict[str, Any], str]:
     try:
         config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -81,10 +82,36 @@ def _load_app_config() -> tuple[dict[str, Any], dict[str, Any]]:
 
     pod_config = config.get("pod")
     gpu_preferences = config.get("gpu_preferences", {})
-    if not isinstance(pod_config, dict) or not isinstance(gpu_preferences, dict):
+    startup_script_url = config.get("pod_startup_script_url")
+    if (
+        not isinstance(pod_config, dict)
+        or not isinstance(gpu_preferences, dict)
+        or not isinstance(startup_script_url, str)
+    ):
         raise HTTPException(status_code=500, detail="Application config is invalid")
 
-    return pod_config.copy(), gpu_preferences
+    parsed_startup_url = urlsplit(startup_script_url)
+    if (
+        parsed_startup_url.scheme != "https"
+        or not parsed_startup_url.netloc
+        or any(
+            placeholder in parsed_startup_url.path.split("/")
+            for placeholder in ("OWNER", "REPOSITORY", "COMMIT")
+        )
+    ):
+        raise HTTPException(status_code=500, detail="Pod startup script URL is invalid")
+
+    return pod_config.copy(), gpu_preferences, startup_script_url
+
+
+def _pod_start_command(script_url: str) -> list[str]:
+    shell_command = (
+        "set -euo pipefail; "
+        f"curl -fsSL {shlex.quote(script_url)} -o /tmp/pod-startup.sh; "
+        "chmod 0700 /tmp/pod-startup.sh; "
+        "exec bash /tmp/pod-startup.sh"
+    )
+    return ["bash", "-lc", shell_command]
 
 
 def _fetch_gpu_catalog(cloud: str, count: int) -> dict[str, Any] | Response:
@@ -262,24 +289,23 @@ def get_pod(pod_name: str) -> Response:
 def create_runpod_pod(
     pod_overrides: dict[str, Any] | None = None,
 ) -> Response:
-    pod_config, gpu_preferences = _load_app_config()
+    pod_config, gpu_preferences, startup_script_url = _load_app_config()
     if pod_overrides:
         pod_config.update(pod_overrides)
 
-    pod_environment = pod_config.get("env", [])
-    if not isinstance(pod_environment, list) or any(
-        not isinstance(variable, str) for variable in pod_environment
+    pod_environment = pod_config.get("env", {})
+    if not isinstance(pod_environment, dict) or any(
+        not isinstance(name, str) or not isinstance(value, str)
+        for name, value in pod_environment.items()
     ):
         raise HTTPException(status_code=500, detail="Pod environment config is invalid")
     public_key = _get_runpod_ssh_public_key()
     if public_key is not None:
-        pod_environment = [
-            variable
-            for variable in pod_environment
-            if not variable.startswith("RUNPOD_SSH_PUBLIC_KEY=")
-        ]
-        pod_environment.append(f"RUNPOD_SSH_PUBLIC_KEY={public_key}")
+        pod_environment = pod_environment.copy()
+        pod_environment["RUNPOD_SSH_PUBLIC_KEY"] = public_key
         pod_config["env"] = pod_environment
+
+    pod_config["dockerStartCmd"] = _pod_start_command(startup_script_url)
 
     if "gpuTypeIds" not in pod_config and pod_config.get("computeType", "GPU") == "GPU":
         cloud = pod_config.get("cloudType", gpu_preferences.get("cloud", "COMMUNITY"))

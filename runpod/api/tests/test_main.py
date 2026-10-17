@@ -13,6 +13,15 @@ from main import (
     app,
 )
 
+STARTUP_SCRIPT_URL = "https://example.com/pod-startup.sh"
+DOCKER_START_CMD = [
+    "bash",
+    "-lc",
+    "set -euo pipefail; curl -fsSL https://example.com/pod-startup.sh "
+    "-o /tmp/pod-startup.sh; chmod 0700 /tmp/pod-startup.sh; "
+    "exec bash /tmp/pod-startup.sh",
+]
+
 
 class HelloTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -245,7 +254,9 @@ class HelloTest(unittest.TestCase):
             key_file.write_text("test-key", encoding="utf-8")
             config_file = Path(temp_dir) / "config.json"
             config_file.write_text(
-                '{"pod": {}, "gpu_preferences": {}}', encoding="utf-8"
+                '{"pod": {}, "gpu_preferences": {}, '
+                f'"pod_startup_script_url": "{STARTUP_SCRIPT_URL}"' + "}",
+                encoding="utf-8",
             )
             with (
                 patch("main.RUNPOD_API_KEY_FILE", key_file),
@@ -260,7 +271,7 @@ class HelloTest(unittest.TestCase):
         post.assert_called_once_with(
             RUNPOD_PODS_URL,
             headers={"Authorization": "Bearer test-key"},
-            json=pod_config,
+            json={**pod_config, "dockerStartCmd": DOCKER_START_CMD},
             timeout=10.0,
         )
 
@@ -284,8 +295,9 @@ class HelloTest(unittest.TestCase):
             config_file = Path(temp_dir) / "config.json"
             config_file.write_text(
                 '{"pod":{"name":"configured-pod","gpuTypeIds":'
-                '["NVIDIA A40"],"env":["OLLAMA_MODEL=qwen3:8b"]},'
-                '"gpu_preferences":{}}',
+                '["NVIDIA A40"],"env":{"OLLAMA_MODEL":"qwen3:8b"}},'
+                '"gpu_preferences":{},'
+                f'"pod_startup_script_url":"{STARTUP_SCRIPT_URL}"' + "}",
                 encoding="utf-8",
             )
             with (
@@ -302,10 +314,11 @@ class HelloTest(unittest.TestCase):
             json={
                 "name": "configured-pod",
                 "gpuTypeIds": ["NVIDIA A40"],
-                "env": [
-                    "OLLAMA_MODEL=qwen3:8b",
-                    "RUNPOD_SSH_PUBLIC_KEY=ssh-ed25519 AAAATEST key-comment",
-                ],
+                "env": {
+                    "OLLAMA_MODEL": "qwen3:8b",
+                    "RUNPOD_SSH_PUBLIC_KEY": "ssh-ed25519 AAAATEST key-comment",
+                },
+                "dockerStartCmd": DOCKER_START_CMD,
             },
             timeout=10.0,
         )
@@ -327,7 +340,8 @@ class HelloTest(unittest.TestCase):
             config_file = Path(temp_dir) / "config.json"
             config_file.write_text(
                 '{"pod":{"name":"configured-pod","gpuTypeIds":'
-                '["NVIDIA A40"]},"gpu_preferences":{"min_vram":64}}',
+                '["NVIDIA A40"]},"gpu_preferences":{"min_vram":64},'
+                f'"pod_startup_script_url":"{STARTUP_SCRIPT_URL}"' + "}",
                 encoding="utf-8",
             )
             with (
@@ -342,7 +356,11 @@ class HelloTest(unittest.TestCase):
         post.assert_called_once_with(
             RUNPOD_PODS_URL,
             headers={"Authorization": "Bearer test-key"},
-            json={"name": "configured-pod", "gpuTypeIds": ["NVIDIA A40"]},
+            json={
+                "name": "configured-pod",
+                "gpuTypeIds": ["NVIDIA A40"],
+                "dockerStartCmd": DOCKER_START_CMD,
+            },
             timeout=10.0,
         )
 
@@ -389,7 +407,8 @@ class HelloTest(unittest.TestCase):
                 '"cloudType":"COMMUNITY","imageName":"test/image",'
                 '"containerDiskInGb":30},"gpu_preferences":'
                 '{"min_vram":32,"max_price":0.5,"cloud":"COMMUNITY",'
-                '"count":1}}',
+                '"count":1},'
+                f'"pod_startup_script_url":"{STARTUP_SCRIPT_URL}"' + "}",
                 encoding="utf-8",
             )
             with (
@@ -422,6 +441,7 @@ class HelloTest(unittest.TestCase):
                 "containerDiskInGb": 30,
                 "gpuCount": 1,
                 "gpuTypeIds": ["gpu-cheapest"],
+                "dockerStartCmd": DOCKER_START_CMD,
             },
             timeout=10.0,
         )
