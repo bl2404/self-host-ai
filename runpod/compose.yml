@@ -6,10 +6,12 @@ services:
     image: webuiai:latest
     container_name: webuiai
     restart: unless-stopped
-    ports:
-      - "3000:8080"
+    network_mode: "service:runpod-api"
+    depends_on:
+      - runpod-api
     environment:
-      OPENAI_API_BASE_URL: http://runpod-api:11434/v1
+      OPENAI_API_BASE_URL: http://127.0.0.1:11434/v1
+      OLLAMA_BASE_URL: http://127.0.0.1:11434
       OPENAI_API_KEY: local-key
       WEBUI_NAME: alabama
     volumes:
@@ -23,6 +25,7 @@ services:
     container_name: runpod-api
     restart: unless-stopped
     ports:
+      - "3000:8080"
       - "127.0.0.1:8000:8000"
     environment:
       RUNPOD_API_KEY_FILE: /run/secrets/runpod_api_key
