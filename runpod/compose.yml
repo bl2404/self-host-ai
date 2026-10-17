@@ -18,3 +18,18 @@ services:
     volumes:
       - ./open-webui-data:/app/backend/data:Z
       - ${RUNPOD_SSH_KEY:?Set RUNPOD_SSH_KEY in .env}:/runpod/id_ed25519:ro,Z
+
+  runpod-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: runpod-api:latest
+    container_name: runpod-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      RUNPOD_API_KEY_FILE: /run/secrets/runpod_api_key
+    volumes:
+      - ./api/config.json:/app/config.json:ro,Z
+      - ./api/runpod_api_key.txt:/run/secrets/runpod_api_key:ro,Z
