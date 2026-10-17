@@ -1,5 +1,3 @@
-"""Minimal hello world program."""
-
 import json
 import os
 from pathlib import Path

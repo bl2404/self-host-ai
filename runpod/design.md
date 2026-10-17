@@ -26,11 +26,34 @@ https://chatgpt.com/c/6aca3f7b-8ef0-83eb-a099-c65d5b29bbc3
 
 
 # gpu pod
-curl -fsSL https://ollama.com/install.sh | sh
-ollama serve > ollama.log 2>&1 &
-ollama pull qwen3:8b (optionally ollama run qwen3:8b later)
-vi /root/.ssh/authodized_keys
-    paste <runpod.pub> content
+Configure the pod with these environment variables and settings:
+
+- `OLLAMA_MODEL=qwen3:8b`
+- `OLLAMA_MODELS=/workspace/ollama` (mount a network volume at `/workspace` to
+    retain models when the pod is replaced)
+- `OLLAMA_HOST=127.0.0.1:11434` (the SSH tunnel reaches the pod's loopback)
+- Optional: `RUNPOD_SSH_PUBLIC_KEY=<contents of ~/.ssh/runpod.pub>`
+- Configure SSH access and expose its TCP port if the selected image does not
+    already provide Runpod SSH access. Do not expose `11434/http`; Ollama has no
+    built-in authentication and is intended to be reached through the SSH tunnel.
+
+Set this as the container start command, replacing the placeholders with the
+public repository and an immutable commit SHA:
+
+```bash
+bash -lc 'curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/<commit>/runpod/pod-startup.sh | bash'
+```
+
+The script installs Ollama if needed, adds the optional public key to
+`/root/.ssh/authorized_keys`, starts Ollama, waits for its API, pulls the model,
+and keeps the server running. The container image must already provide a working
+SSH server if you rely on that key; adding `authorized_keys` alone does not start
+or configure `sshd`. Prefer Runpod's registered SSH key support when available.
+
+**Better long-term:** bake Ollama and this startup script into a pinned custom
+Docker image, then use a network volume for `/workspace/ollama`. Downloading and
+executing a mutable remote script at every boot adds a network dependency and a
+supply-chain risk; pin the raw URL to a commit even for this bootstrap approach.
 
 
 # local
