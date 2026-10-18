@@ -12,14 +12,13 @@ Client (Mobile / Browser / vscode agent) -> Cloudflare tunnel -> Local Fedora Se
 ```
 
 # To do
-- [ ] api cerating, starting, stoping container
-- [ ] startup script for newly started pod
-- [ ] script for local ssh tunnel for copilot
-- [ ] integration to HA
-- [ ] integration of UI to alabamalab
+- [x] api cerating, starting, stoping container
+- [x] startup script for newly started pod
+- [x] script for local ssh tunnel for copilot
+- [ ] integration to vscode
+- [ ] frontend/integration to HA
+- [ ] integration to alabamalab compose
 - [ ] no activity auto-off
-- [ ] details. e.g. git control
-- [ ] move ssh tunnel to separate container
 
 
 https://chatgpt.com/c/6aca3f7b-8ef0-83eb-a099-c65d5b29bbc3
