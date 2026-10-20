@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
     <meta name="description" content="Create a Runpod Pod from the bridge API.">
-    <title>Runpod Bridge · Create Pod</title>
+    <title>alabama-ai · Create Pod</title>
     <style>
         /* ---------- design tokens ---------- */
         :root {
@@ -72,7 +72,7 @@
 
         /* ---------- shell ---------- */
         .shell {
-            max-width: 1240px;
+            max-width: 560px;
             margin: 0 auto;
             padding: 34px 24px 56px;
         }
@@ -157,7 +157,7 @@
         /* ---------- layout ---------- */
         .layout {
             display: grid;
-            grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+            grid-template-columns: minmax(0, 1fr);
             gap: 20px;
             align-items: start;
         }
@@ -167,10 +167,6 @@
             flex-direction: column;
             gap: 20px;
             min-width: 0;
-        }
-
-        @media (max-width: 960px) {
-            .layout { grid-template-columns: minmax(0, 1fr); }
         }
 
         /* ---------- card ---------- */
@@ -211,6 +207,24 @@
             font-size: .86rem;
             color: var(--muted);
         }
+
+        .cost {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            margin: 10px 0 0;
+            font-size: .8rem;
+            color: var(--muted);
+        }
+
+        .cost strong {
+            font-family: var(--mono);
+            font-size: .86rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .cost[hidden] { display: none; }
 
         /* ---------- form ---------- */
         .field { margin-top: 18px; }
@@ -311,6 +325,17 @@
         .btn--primary:hover:not(:disabled) {
             background: linear-gradient(135deg, #8b7cff 0%, #a97bff 55%, #3fdcf3 130%);
             border-color: transparent;
+        }
+
+        .btn--danger {
+            color: #ffd7dd;
+            background: rgba(251, 113, 133, .12);
+            border-color: rgba(251, 113, 133, .35);
+        }
+
+        .btn--danger:hover:not(:disabled) {
+            background: rgba(251, 113, 133, .2);
+            border-color: rgba(251, 113, 133, .5);
         }
 
         .btn--ghost { background: transparent; }
@@ -522,15 +547,6 @@
             color: var(--muted-2);
         }
 
-        footer {
-            margin-top: 26px;
-            text-align: center;
-            font-size: .74rem;
-            color: var(--muted-2);
-        }
-
-        footer code { font-family: var(--mono); color: var(--muted); }
-
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
                 animation-duration: .001ms !important;
@@ -550,22 +566,29 @@
                     </svg>
                 </div>
                 <div>
-                    <h1>Runpod Bridge</h1>
-                    <p>Control-plane console</p>
+                    <h1>alabama-ai</h1>
+                    <p>alabama</p>
                 </div>
-            </div>
-            <div class="status-chip" id="statusChip" data-state="idle" role="status" aria-live="polite">
-                <span class="dot"></span>
-                <span id="statusText">Idle</span>
             </div>
         </header>
 
         <div class="layout">
             <div class="col">
                 <section class="card">
-                    <div class="card-head"><h2>Create Pod</h2></div>
+                    <div class="card-head">
+                        <h2>Create GPU Pod</h2>
+                        <div class="status-chip" id="statusChip" data-state="idle" role="status" aria-live="polite">
+                            <span class="dot"></span>
+                            <span id="statusText">Idle</span>
+                        </div>
+                    </div>
                     <div class="card-body">
                         <p class="lede">Creates a Pod from the configured template and GPU preferences.</p>
+
+                        <p class="cost" id="costLine" hidden>
+                            <span>Cost</span>
+                            <strong id="costValue">&mdash;</strong>
+                        </p>
 
                         <div class="field">
                             <div class="endpoint-row">
@@ -573,7 +596,7 @@
                                     <span class="spinner" aria-hidden="true"></span>
                                     <span id="createLabel">Create Pod</span>
                                 </button>
-                                <a class="btn btn--ghost" id="openWebuiBtn" href="http://localhost:3000"
+                                <a class="btn btn--primary" id="openWebuiBtn" href="http://localhost:3000"
                                    target="_blank" rel="noopener" hidden>Open WebUI</a>
                             </div>
                         </div>
@@ -585,10 +608,6 @@
                 </section>
             </div>
         </div>
-
-        <footer>
-            Runpod bridge console · served by <code>nginx</code> on port <code>8081</code>
-        </footer>
     </main>
 
     <script>
@@ -611,6 +630,8 @@
                 openWebuiBtn: document.getElementById('openWebuiBtn'),
                 statusChip: document.getElementById('statusChip'),
                 statusText: document.getElementById('statusText'),
+                costLine: document.getElementById('costLine'),
+                costValue: document.getElementById('costValue'),
                 previewWrap: document.getElementById('previewWrap'),
                 preview: document.getElementById('preview')
             };
@@ -628,8 +649,14 @@
             function setButton(label, isBusy) {
                 busy = isBusy;
                 els.createBtn.disabled = isBusy;
+                els.createBtn.setAttribute('aria-busy', String(isBusy));
                 els.createBtn.classList.toggle('is-busy', isBusy);
                 els.createLabel.textContent = label;
+            }
+
+            function setDestructive(isDelete) {
+                els.createBtn.classList.toggle('btn--danger', isDelete);
+                els.createBtn.classList.toggle('btn--primary', !isDelete);
             }
 
             function openWebuiUrl() {
@@ -645,9 +672,28 @@
                 els.openWebuiBtn.hidden = true;
             }
 
+            function showCost(pod) {
+                var cost = pod ? pod.costPerHr : null;
+
+                if (typeof cost === 'string') {
+                    cost = parseFloat(cost);
+                }
+                if (typeof cost !== 'number' || !isFinite(cost) || cost < 0) {
+                    return;
+                }
+
+                els.costValue.textContent = '$' + cost.toFixed(2) + ' / hr';
+                els.costLine.hidden = false;
+            }
+
+            function hideCost() {
+                els.costLine.hidden = true;
+            }
+
             function finishReady() {
                 buttonMode = 'delete';
                 setStatus('online', 'Ready');
+                setDestructive(true);
                 setButton('Delete Pod', false);
                 showOpenWebui();
             }
@@ -787,8 +833,11 @@
             function waitForPublicIp() {
                 return request(POD_URL).then(function (result) {
                     var pod = result.data;
-                    if (result.ok && hasPublicIp(pod)) {
-                        return pod;
+                    if (result.ok && pod) {
+                        showCost(pod);
+                        if (hasPublicIp(pod)) {
+                            return pod;
+                        }
                     }
                     return wait(POLL_INTERVAL_MS).then(waitForPublicIp);
                 }, function () {
@@ -819,10 +868,14 @@
                 });
             }
 
-            // Waits for Ollama to answer through the tunnel.
+            // Waits until Ollama answers through the tunnel *and* has at least
+            // one model installed. `/api/tags` returns 200 with an empty list
+            // while Ollama is still pulling, so a 200 alone is not readiness.
             function waitForOllama() {
                 return request(OLLAMA_URL).then(function (result) {
-                    if (result.ok) {
+                    var models = result.data && result.data.models;
+
+                    if (result.ok && Array.isArray(models) && models.length > 0) {
                         return result;
                     }
                     return wait(POLL_INTERVAL_MS).then(waitForOllama);
@@ -865,6 +918,8 @@
 
                 hidePreview();
                 hideOpenWebui();
+                hideCost();
+                setDestructive(false);
                 setButton('Checking Pod', true);
                 setStatus('checking', 'Checking Pod');
 
@@ -872,6 +927,7 @@
                     .then(function (pod) {
                         checked = true;
                         if (pod) {
+                            showCost(pod);
                             return continueFlow(pod);
                         }
                         if (!createIfMissing) {
@@ -926,6 +982,8 @@
                         }
                         buttonMode = 'create';
                         setStatus('idle', 'Idle');
+                        hideCost();
+                        setDestructive(false);
                         setButton('Create Pod', false);
                     })
                     .catch(function (error) {
@@ -935,6 +993,7 @@
 
                         // Deletion failed, so the Pod still exists.
                         buttonMode = 'delete';
+                        setDestructive(true);
                         setButton('Delete Pod', false);
                     });
             }
