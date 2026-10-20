@@ -15,8 +15,17 @@ services:
       OLLAMA_BASE_URL: http://127.0.0.1:11435
       OPENAI_API_KEY: local-key
       WEBUI_NAME: alabama
+  simple-website:
+    image: nginx:alpine
+    container_name: simple-website
+    restart: unless-stopped
+    depends_on:
+      - runpod-api
+    ports:
+      - "8081:80"
     volumes:
-      - ./open-webui-data:/app/backend/data:Z
+      - ./index.html:/usr/share/nginx/html/index.html:ro,Z
+      - ./website-nginx.conf:/etc/nginx/conf.d/default.conf:ro,Z
 
   nginx-proxy:
     image: nginx:alpine

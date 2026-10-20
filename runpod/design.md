@@ -15,8 +15,10 @@ Client (Mobile / Browser / vscode agent) -> Cloudflare tunnel -> Local Fedora Se
 - [x] api cerating, starting, stoping container
 - [x] startup script for newly started pod
 - [x] script for local ssh tunnel for copilot
-- [ ] integration to vscode
-- [ ] frontend/integration to HA
+- [x] integration to vscode
+- [x] upgrade qwen to 32b
+- [ ] poll until ollama responsive
+- [ ] frontend
 - [ ] integration to alabamalab compose
 - [ ] no activity auto-off
 

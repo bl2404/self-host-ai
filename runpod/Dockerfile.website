@@ -1,0 +1,4 @@
+FROM python:3.9-slim
+COPY index.html /
+WORKDIR /
+CMD ["python3", "-m", "http.server", "80"]
